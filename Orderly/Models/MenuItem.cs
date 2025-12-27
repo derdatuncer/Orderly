@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -23,9 +24,11 @@ namespace Orderly.Models
         [Column("price")]
         public decimal Price { get; set; }
 
-        // Navigation property
+        // Navigation properties
         [ForeignKey("CategoryId")]
         public virtual MenuCategory Category { get; set; }
+
+        public virtual ICollection<ProductOption> Options { get; set; }
     }
 }
 

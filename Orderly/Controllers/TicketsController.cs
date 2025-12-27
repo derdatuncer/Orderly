@@ -117,6 +117,16 @@ namespace Orderly.Controllers
                     .ToList()
                     .ToDictionary(mi => mi.ItemId, mi => mi);
 
+                // Opsiyonları al
+                var ticketItemIds = ticketItems.Select(ti => ti.OrderItemId).ToList();
+                var ticketItemOptions = db.TicketItemOptions
+                    .Include(tio => tio.Option)
+                    .Include(tio => tio.OptionValue)
+                    .Where(tio => ticketItemIds.Contains(tio.TicketItemId))
+                    .ToList()
+                    .GroupBy(tio => tio.TicketItemId)
+                    .ToDictionary(g => g.Key, g => g.ToList());
+
                 var items = ticketItems.Select(ti =>
                 {
                     string categoryName = "(Silinmiş Kategori)";
@@ -129,6 +139,24 @@ namespace Orderly.Controllers
                         }
                     }
 
+                    var optionsList = new List<object>();
+                    if (ticketItemOptions.ContainsKey(ti.OrderItemId))
+                    {
+                        foreach (var tio in ticketItemOptions[ti.OrderItemId])
+                        {
+                            optionsList.Add(new
+                            {
+                                ticketItemOptionId = tio.TicketItemOptionId,
+                                optionId = tio.OptionId,
+                                optionName = tio.Option != null ? tio.Option.OptionName : "(Silinmiş Opsiyon)",
+                                optionValueId = tio.OptionValueId,
+                                valueName = tio.OptionValue != null ? tio.OptionValue.ValueName : (string)null,
+                                customText = tio.CustomText,
+                                priceModifier = tio.PriceModifier
+                            });
+                        }
+                    }
+
                     return new
                     {
                         orderItemId = ti.OrderItemId,
@@ -136,7 +164,9 @@ namespace Orderly.Controllers
                         unitPrice = ti.UnitPrice,
                         lineTotal = ti.LineTotal,
                         itemName = ti.ItemName ?? "(Silinmiş Ürün)",
-                        categoryName = categoryName
+                        categoryName = categoryName,
+                        specialInstructions = ti.SpecialInstructions,
+                        options = optionsList
                     };
                 }).ToList();
 
@@ -414,6 +444,11 @@ namespace Orderly.Controllers
                 if (menuItem == null)
                     return BadRequest("Ürün bulunamadı");
 
+                // Special instructions kontrolü
+                string specialInstructions = data.specialInstructions?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(specialInstructions) && specialInstructions.Length > 500)
+                    return BadRequest("Özel not maksimum 500 karakter olabilir");
+
                 // Yeni ürün ekle (item_name de kaydedilir)
                 // LineTotal computed column olduğu için set etmiyoruz, veritabanı otomatik hesaplayacak
                 var ticketItem = new TicketItem
@@ -423,11 +458,64 @@ namespace Orderly.Controllers
                     Quantity = quantity,
                     UnitPrice = unitPrice,
                     ItemName = menuItem.ItemName,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow,
+                    SpecialInstructions = specialInstructions
                 };
 
                 db.TicketItems.Add(ticketItem);
                 db.SaveChanges();
+
+                // Opsiyonları ekle
+                if (data.options != null)
+                {
+                    try
+                    {
+                        var options = data.options as Newtonsoft.Json.Linq.JArray;
+                        if (options != null)
+                        {
+                            foreach (var opt in options)
+                            {
+                                long optionId = Convert.ToInt64(opt["optionId"]);
+                                long? optionValueId = opt["optionValueId"] != null ? (long?)Convert.ToInt64(opt["optionValueId"]) : null;
+                                string customText = opt["customText"]?.ToString()?.Trim();
+                                decimal priceModifier = opt["priceModifier"] != null ? Convert.ToDecimal(opt["priceModifier"]) : 0;
+
+                                // Option'ı kontrol et
+                                var productOption = db.ProductOptions.Find(optionId);
+                                if (productOption == null || productOption.ItemId != itemId)
+                                    continue; // Geçersiz opsiyon, atla
+
+                                // OptionValue'yu kontrol et (eğer select tipindeyse)
+                                if (productOption.OptionType == "select" && optionValueId.HasValue)
+                                {
+                                    var optionValue = db.ProductOptionValues
+                                        .FirstOrDefault(ov => ov.OptionValueId == optionValueId.Value && ov.OptionId == optionId);
+                                    if (optionValue != null)
+                                    {
+                                        priceModifier = optionValue.PriceModifier;
+                                    }
+                                }
+
+                                var ticketItemOption = new TicketItemOption
+                                {
+                                    TicketItemId = ticketItem.OrderItemId,
+                                    OptionId = optionId,
+                                    OptionValueId = optionValueId,
+                                    CustomText = customText,
+                                    PriceModifier = priceModifier,
+                                    CreatedAt = DateTime.UtcNow
+                                };
+
+                                db.TicketItemOptions.Add(ticketItemOption);
+                            }
+                            db.SaveChanges();
+                        }
+                    }
+                    catch
+                    {
+                        // Opsiyon ekleme hatası, ama ürün zaten eklendi, devam et
+                    }
+                }
 
                 return Ok(new { orderItemId = ticketItem.OrderItemId, updated = false });
             }
@@ -537,6 +625,216 @@ namespace Orderly.Controllers
                 // Not: İndirim sadece kapatma sırasında uygulanacak
                 // Bu endpoint sadece bilgilendirme amaçlı
                 return Ok(new { message = "İndirim uygulanacak", discount });
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
+        // GET: api/tickets/items/{itemId}/options
+        [HttpGet]
+        [Route("api/tickets/items/{itemId}/options")]
+        public IHttpActionResult GetTicketItemOptions(long itemId)
+        {
+            try
+            {
+                var ticketItem = db.TicketItems.Find(itemId);
+                if (ticketItem == null)
+                    return NotFound();
+
+                var options = db.TicketItemOptions
+                    .Include(tio => tio.Option)
+                    .Include(tio => tio.OptionValue)
+                    .Where(tio => tio.TicketItemId == itemId)
+                    .OrderBy(tio => tio.CreatedAt)
+                    .Select(tio => new
+                    {
+                        ticketItemOptionId = tio.TicketItemOptionId,
+                        optionId = tio.OptionId,
+                        optionName = tio.Option != null ? tio.Option.OptionName : "(Silinmiş Opsiyon)",
+                        optionType = tio.Option != null ? tio.Option.OptionType : null,
+                        optionValueId = tio.OptionValueId,
+                        valueName = tio.OptionValue != null ? tio.OptionValue.ValueName : null,
+                        customText = tio.CustomText,
+                        priceModifier = tio.PriceModifier,
+                        createdAt = tio.CreatedAt
+                    })
+                    .ToList();
+
+                return Ok(options);
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
+        // POST: api/tickets/items/{itemId}/options
+        [HttpPost]
+        [Route("api/tickets/items/{itemId}/options")]
+        public IHttpActionResult AddTicketItemOption(long itemId, [FromBody] dynamic data)
+        {
+            try
+            {
+                if (data == null)
+                    return BadRequest("Opsiyon bilgileri gerekli");
+
+                var ticketItem = db.TicketItems
+                    .Include(ti => ti.Ticket)
+                    .FirstOrDefault(ti => ti.OrderItemId == itemId);
+                if (ticketItem == null)
+                    return NotFound();
+
+                // Sadece açık ticket'lara opsiyon eklenebilir
+                if (ticketItem.Ticket.Status != "open")
+                    return BadRequest("Sadece açık adisyonlara opsiyon eklenebilir");
+
+                long optionId = Convert.ToInt64(data.optionId);
+                long? optionValueId = data.optionValueId != null ? (long?)Convert.ToInt64(data.optionValueId) : null;
+                string customText = data.customText?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(customText) && customText.Length > 500)
+                    return BadRequest("Özel metin maksimum 500 karakter olabilir");
+
+                // Option'ı kontrol et
+                var productOption = db.ProductOptions.Find(optionId);
+                if (productOption == null)
+                    return BadRequest("Opsiyon bulunamadı");
+
+                if (productOption.ItemId != ticketItem.ItemId)
+                    return BadRequest("Bu opsiyon bu ürün için geçerli değil");
+
+                decimal priceModifier = 0;
+
+                // OptionValue'yu kontrol et ve price modifier'ı al
+                if (productOption.OptionType == "select" && optionValueId.HasValue)
+                {
+                    var optionValue = db.ProductOptionValues
+                        .FirstOrDefault(ov => ov.OptionValueId == optionValueId.Value && ov.OptionId == optionId);
+                    if (optionValue == null)
+                        return BadRequest("Opsiyon değeri bulunamadı");
+                    priceModifier = optionValue.PriceModifier;
+                }
+                else if (productOption.OptionType == "text")
+                {
+                    if (string.IsNullOrEmpty(customText))
+                        return BadRequest("Text tipindeki opsiyonlar için metin gerekli");
+                }
+
+                // Manuel price modifier override
+                if (data.priceModifier != null)
+                {
+                    priceModifier = Convert.ToDecimal(data.priceModifier);
+                }
+
+                var ticketItemOption = new TicketItemOption
+                {
+                    TicketItemId = itemId,
+                    OptionId = optionId,
+                    OptionValueId = optionValueId,
+                    CustomText = customText,
+                    PriceModifier = priceModifier,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                db.TicketItemOptions.Add(ticketItemOption);
+                db.SaveChanges();
+
+                return Ok(new
+                {
+                    ticketItemOptionId = ticketItemOption.TicketItemOptionId,
+                    message = "Opsiyon eklendi"
+                });
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
+        // PUT: api/tickets/items/options/{optionId}
+        [HttpPut]
+        [Route("api/tickets/items/options/{optionId}")]
+        public IHttpActionResult UpdateTicketItemOption(long optionId, [FromBody] dynamic data)
+        {
+            try
+            {
+                if (data == null)
+                    return BadRequest("Opsiyon bilgileri gerekli");
+
+                var ticketItemOption = db.TicketItemOptions
+                    .Include(tio => tio.TicketItem)
+                    .Include("TicketItem.Ticket")
+                    .FirstOrDefault(tio => tio.TicketItemOptionId == optionId);
+                if (ticketItemOption == null)
+                    return NotFound();
+
+                // Sadece açık ticket'larda opsiyon güncellenebilir
+                if (ticketItemOption.TicketItem.Ticket.Status != "open")
+                    return BadRequest("Sadece açık adisyonlarda opsiyon güncellenebilir");
+
+                long? optionValueId = data.optionValueId != null ? (long?)Convert.ToInt64(data.optionValueId) : null;
+                string customText = data.customText?.ToString()?.Trim();
+                if (!string.IsNullOrEmpty(customText) && customText.Length > 500)
+                    return BadRequest("Özel metin maksimum 500 karakter olabilir");
+
+                var productOption = db.ProductOptions.Find(ticketItemOption.OptionId);
+                if (productOption != null)
+                {
+                    decimal priceModifier = 0;
+
+                    if (productOption.OptionType == "select" && optionValueId.HasValue)
+                    {
+                        var optionValue = db.ProductOptionValues
+                            .FirstOrDefault(ov => ov.OptionValueId == optionValueId.Value && ov.OptionId == productOption.OptionId);
+                        if (optionValue != null)
+                            priceModifier = optionValue.PriceModifier;
+                    }
+
+                    // Manuel price modifier override
+                    if (data.priceModifier != null)
+                    {
+                        priceModifier = Convert.ToDecimal(data.priceModifier);
+                    }
+
+                    ticketItemOption.PriceModifier = priceModifier;
+                }
+
+                ticketItemOption.OptionValueId = optionValueId;
+                ticketItemOption.CustomText = customText;
+
+                db.SaveChanges();
+
+                return Ok(new { message = "Opsiyon güncellendi" });
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
+        // DELETE: api/tickets/items/options/{optionId}
+        [HttpDelete]
+        [Route("api/tickets/items/options/{optionId}")]
+        public IHttpActionResult DeleteTicketItemOption(long optionId)
+        {
+            try
+            {
+                var ticketItemOption = db.TicketItemOptions
+                    .Include(tio => tio.TicketItem)
+                    .Include("TicketItem.Ticket")
+                    .FirstOrDefault(tio => tio.TicketItemOptionId == optionId);
+                if (ticketItemOption == null)
+                    return NotFound();
+
+                // Sadece açık ticket'larda opsiyon silinebilir
+                if (ticketItemOption.TicketItem.Ticket.Status != "open")
+                    return BadRequest("Sadece açık adisyonlarda opsiyon silinebilir");
+
+                db.TicketItemOptions.Remove(ticketItemOption);
+                db.SaveChanges();
+
+                return Ok(new { message = "Opsiyon silindi" });
             }
             catch (Exception ex)
             {

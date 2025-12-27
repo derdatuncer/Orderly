@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Card, Button, Drawer, Input, Select, Table, Space, InputNumber, Modal, App, Collapse } from 'antd';
-import { PlusOutlined, PrinterOutlined, CloseOutlined, DeleteOutlined, PercentageOutlined, StopOutlined } from '@ant-design/icons';
-import { getTables, createTable, getTableDetails, deleteTable, openTicket, printTicket, closeTicket, cancelTicket, reopenTicket, addItemToTicket, removeItemFromTicket, getMenu } from '../../services/api';
+import { PlusOutlined, PrinterOutlined, CloseOutlined, DeleteOutlined, PercentageOutlined, StopOutlined, EditOutlined } from '@ant-design/icons';
+import { getTables, createTable, getTableDetails, deleteTable, openTicket, printTicket, closeTicket, cancelTicket, reopenTicket, addItemToTicket, removeItemFromTicket, getMenu, getItemOptions } from '../../services/api';
 
 const { Option } = Select;
 const { Panel } = Collapse;
@@ -24,6 +24,12 @@ const Tables = () => {
   const [serviceChargeType, setServiceChargeType] = useState('tl'); // yüzde veya tl
   const [isAdmin] = useState(true); // Geçici: daha sonra kullabıcı girişi yapılacak
   const [addTableModalVisible, setAddTableModalVisible] = useState(false);
+  const [addItemModalVisible, setAddItemModalVisible] = useState(false);
+  const [selectedItemForAdd, setSelectedItemForAdd] = useState(null);
+  const [itemOptions, setItemOptions] = useState([]);
+  const [selectedOptions, setSelectedOptions] = useState({});
+  const [specialInstructions, setSpecialInstructions] = useState('');
+  const [loadingOptions, setLoadingOptions] = useState(false);
 
   useEffect(() => {
     loadTables();
@@ -117,7 +123,7 @@ const Tables = () => {
     });
   };
 
-  const handleAddItem = async (item) => {
+  const handleQuickAddItem = async (item) => {
     let currentTicketId = tableDetails?.ticket?.ticketId;
 
     // Eğer aktif ticket yoksa, önce ticket aç
@@ -143,10 +149,96 @@ const Tables = () => {
         currentTicketId,
         item.itemId,
         1,
-        item.price
+        item.price,
+        null,
+        null
       );
       await loadTableDetails(selectedTable.tableId);
       loadTables();
+      message.success("Ürün eklendi");
+    } catch (error) {
+      message.error("Ürün eklendiğinde bir hata oluştu");
+      console.error("Item add error:",error);
+    }
+  };
+
+  const handleAddItemClick = async (item, e) => {
+    // Eğer ikona tıklandıysa, event'i durdur ve detaylı ekleme modal'ını aç
+    if (e && e.target.closest('.item-edit-icon')) {
+      e.stopPropagation();
+      setSelectedItemForAdd(item);
+      setSelectedOptions({});
+      setSpecialInstructions('');
+      setAddItemModalVisible(true);
+      
+      // Ürün opsiyonlarını yükle
+      setLoadingOptions(true);
+      try {
+        const options = await getItemOptions(item.itemId);
+        setItemOptions(options);
+      } catch (error) {
+        console.error("Options load error:", error);
+        setItemOptions([]);
+      } finally {
+        setLoadingOptions(false);
+      }
+    } else {
+      // Normal tıklama = hızlı ekleme
+      handleQuickAddItem(item);
+    }
+  };
+
+  const handleAddItem = async () => {
+    if (!selectedItemForAdd) return;
+
+    let currentTicketId = tableDetails?.ticket?.ticketId;
+
+    // Eğer aktif ticket yoksa, önce ticket aç
+    if (!currentTicketId) {
+      try {
+        const result = await openTicket(selectedTable.tableId);
+        if (result.ticketId) {
+          const updatedDetails = await loadTableDetails(selectedTable.tableId);
+          currentTicketId = updatedDetails?.ticket?.ticketId;
+          if (!currentTicketId) {
+            return;
+          }
+        } else {
+          return;
+          }
+      } catch (error) {
+        return;
+      }
+    }
+
+    try {
+      // Seçilen opsiyonları formatla
+      const options = [];
+      Object.keys(selectedOptions).forEach(optionId => {
+        const optionValue = selectedOptions[optionId];
+        if (optionValue !== null && optionValue !== undefined && optionValue !== '') {
+          options.push({
+            optionId: parseInt(optionId),
+            optionValueId: parseInt(optionValue),
+          });
+        }
+      });
+
+      await addItemToTicket(
+        currentTicketId,
+        selectedItemForAdd.itemId,
+        1,
+        selectedItemForAdd.price,
+        options.length > 0 ? options : null,
+        specialInstructions.trim() || null
+      );
+      setAddItemModalVisible(false);
+      setSelectedItemForAdd(null);
+      setSelectedOptions({});
+      setSpecialInstructions('');
+      await loadTableDetails(selectedTable.tableId);
+      loadTables();
+      message.success("Ürün eklendi");
     } catch (error) {
       message.error("Ürün eklendiğinde bir hata oluştu");
       console.error("Item add error:",error);
@@ -262,6 +354,31 @@ const Tables = () => {
       title: 'Ürün',
       dataIndex: 'itemName',
       key: 'itemName',
+      render: (text, record) => (
+        <div>
+          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{text}</div>
+          {record.options && record.options.length > 0 && (
+            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+              {record.options.map((opt, idx) => (
+                <div key={idx} style={{ marginBottom: 2 }}>
+                  <span style={{ fontWeight: 'bold' }}>{opt.optionName}:</span>{' '}
+                  {opt.valueName || opt.customText || '-'}
+                  {opt.priceModifier !== 0 && (
+                    <span style={{ marginLeft: 4, color: opt.priceModifier > 0 ? '#ff4d4f' : '#52c41a' }}>
+                      ({opt.priceModifier > 0 ? '+' : ''}{opt.priceModifier.toFixed(2)} ₺)
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {record.specialInstructions && (
+            <div style={{ fontSize: 12, color: '#1890ff', marginTop: 4, fontStyle: 'italic' }}>
+              📝 {record.specialInstructions}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       title: 'Kategori',
@@ -525,11 +642,12 @@ const Tables = () => {
                           <Card
                             key={item.itemId}
                             hoverable
-                            onClick={() => handleAddItem(item)}
+                            onClick={(e) => handleAddItemClick(item, e)}
                             style={{
                               textAlign: 'center',
                               cursor: 'pointer',
                               border: '1px solid #d9d9d9',
+                              position: 'relative',
                             }}
                             bodyStyle={{ padding: 12 }}
                           >
@@ -539,6 +657,25 @@ const Tables = () => {
                             <div style={{ fontSize: 16, color: '#1890ff', fontWeight: 'bold' }}>
                               {item.price.toFixed(2)} ₺
                             </div>
+                            <EditOutlined
+                              className="item-edit-icon"
+                              style={{
+                                position: 'absolute',
+                                bottom: 8,
+                                right: 8,
+                                fontSize: 14,
+                                color: '#1890ff',
+                                cursor: 'pointer',
+                                padding: '2px 4px',
+                                borderRadius: 4,
+                                backgroundColor: 'rgba(24, 144, 255, 0.1)',
+                                zIndex: 10,
+                              }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAddItemClick(item, e);
+                              }}
+                            />
                           </Card>
                         ))}
                       </div>
@@ -688,6 +825,82 @@ const Tables = () => {
           </p>
           <p style={{ marginTop: 8 }}><strong>Ödeme:</strong> {paymentMethod === 'cash' ? 'Nakit' : 'Kart'}</p>
         </div>
+      </Modal>
+
+      {/* Ürün Ekleme Modal */}
+      <Modal
+        title={selectedItemForAdd ? `Ürün Ekle: ${selectedItemForAdd.itemName}` : 'Ürün Ekle'}
+        open={addItemModalVisible}
+        onOk={handleAddItem}
+        onCancel={() => {
+          setAddItemModalVisible(false);
+          setSelectedItemForAdd(null);
+          setSelectedOptions({});
+          setSpecialInstructions('');
+        }}
+        okText="Ekle"
+        cancelText="İptal"
+        width={600}
+      >
+        {selectedItemForAdd && (
+          <div>
+            <div style={{ marginBottom: 16, padding: 12, backgroundColor: '#f5f5f5', borderRadius: 4 }}>
+              <div><strong>Ürün:</strong> {selectedItemForAdd.itemName}</div>
+              <div><strong>Fiyat:</strong> {selectedItemForAdd.price.toFixed(2)} ₺</div>
+            </div>
+
+            {loadingOptions ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>Opsiyonlar yükleniyor...</div>
+            ) : itemOptions.length > 0 ? (
+              <div style={{ marginBottom: 16 }}>
+                <h4>Opsiyonlar</h4>
+                {itemOptions
+                  .filter(option => option.optionType === 'select' && option.values && option.values.length > 0)
+                  .map((option) => (
+                    <div key={option.optionId} style={{ marginBottom: 16 }}>
+                      <div style={{ marginBottom: 8, fontWeight: 'bold' }}>
+                        {option.optionName}
+                      </div>
+                      <Select
+                        style={{ width: '100%' }}
+                        placeholder={`${option.optionName} seçiniz`}
+                        value={selectedOptions[option.optionId] || undefined}
+                        onChange={(value) => {
+                          setSelectedOptions({
+                            ...selectedOptions,
+                            [option.optionId]: value,
+                          });
+                        }}
+                      >
+                        {option.values.map((val) => (
+                          <Option key={val.optionValueId} value={val.optionValueId}>
+                            {val.valueName}
+                            {val.priceModifier !== 0 && (
+                              <span style={{ marginLeft: 8, color: val.priceModifier > 0 ? '#ff4d4f' : '#52c41a' }}>
+                                ({val.priceModifier > 0 ? '+' : ''}{val.priceModifier.toFixed(2)} ₺)
+                              </span>
+                            )}
+                          </Option>
+                        ))}
+                      </Select>
+                    </div>
+                  ))}
+              </div>
+            ) : null}
+
+            <div style={{ marginBottom: 16 }}>
+              <h4>Özel Not / Detay</h4>
+              <Input.TextArea
+                rows={3}
+                placeholder="Örn: Domates içinde olmasın, Az pişmiş olsun..."
+                value={specialInstructions}
+                onChange={(e) => setSpecialInstructions(e.target.value)}
+                maxLength={500}
+                showCount
+              />
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* Masa Ekleme Modal */}

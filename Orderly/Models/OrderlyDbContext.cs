@@ -17,6 +17,9 @@ namespace Orderly.Models
         public DbSet<MenuItem> MenuItems { get; set; }
         public DbSet<Ticket> Tickets { get; set; }
         public DbSet<TicketItem> TicketItems { get; set; }
+        public DbSet<ProductOption> ProductOptions { get; set; }
+        public DbSet<ProductOptionValue> ProductOptionValues { get; set; }
+        public DbSet<TicketItemOption> TicketItemOptions { get; set; }
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
@@ -53,9 +56,42 @@ namespace Orderly.Models
                 .WillCascadeOnDelete(true);
 
             modelBuilder.Entity<TicketItem>()
-                .HasRequired(ti => ti.MenuItem)
+                .HasOptional(ti => ti.MenuItem)
                 .WithMany()
                 .HasForeignKey(ti => ti.ItemId)
+                .WillCascadeOnDelete(false);
+
+            // ProductOption relationships
+            modelBuilder.Entity<ProductOption>()
+                .HasRequired(po => po.MenuItem)
+                .WithMany(mi => mi.Options)
+                .HasForeignKey(po => po.ItemId)
+                .WillCascadeOnDelete(true);
+
+            // ProductOptionValue relationships
+            modelBuilder.Entity<ProductOptionValue>()
+                .HasRequired(pov => pov.Option)
+                .WithMany(po => po.Values)
+                .HasForeignKey(pov => pov.OptionId)
+                .WillCascadeOnDelete(true);
+
+            // TicketItemOption relationships
+            modelBuilder.Entity<TicketItemOption>()
+                .HasRequired(tio => tio.TicketItem)
+                .WithMany(ti => ti.Options)
+                .HasForeignKey(tio => tio.TicketItemId)
+                .WillCascadeOnDelete(true);
+
+            modelBuilder.Entity<TicketItemOption>()
+                .HasRequired(tio => tio.Option)
+                .WithMany(po => po.TicketItemOptions)
+                .HasForeignKey(tio => tio.OptionId)
+                .WillCascadeOnDelete(false);
+
+            modelBuilder.Entity<TicketItemOption>()
+                .HasOptional(tio => tio.OptionValue)
+                .WithMany(pov => pov.TicketItemOptions)
+                .HasForeignKey(tio => tio.OptionValueId)
                 .WillCascadeOnDelete(false);
 
             base.OnModelCreating(modelBuilder);

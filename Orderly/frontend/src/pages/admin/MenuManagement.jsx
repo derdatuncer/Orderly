@@ -12,6 +12,7 @@ import {
   Popconfirm,
   Collapse,
   Select,
+  Divider,
 } from 'antd';
 import {
   PlusOutlined,
@@ -27,6 +28,13 @@ import {
   updateItem,
   deleteItem,
   getMenu,
+  getItemOptions,
+  createItemOption,
+  updateItemOption,
+  deleteItemOption,
+  createOptionValue,
+  updateOptionValue,
+  deleteOptionValue,
 } from '../../services/api';
 
 const { Panel } = Collapse;
@@ -39,8 +47,14 @@ const MenuManagement = () => {
   const [itemModalVisible, setItemModalVisible] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [editingItem, setEditingItem] = useState(null);
+  const [optionsModalVisible, setOptionsModalVisible] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [itemOptions, setItemOptions] = useState([]);
+  const [loadingOptions, setLoadingOptions] = useState(false);
   const [form] = Form.useForm();
   const [itemForm] = Form.useForm();
+  const [newOptionName, setNewOptionName] = useState('');
+  const [newOptionValues, setNewOptionValues] = useState([{ name: '', price: 0 }]);
 
   useEffect(() => {
     loadData();
@@ -155,6 +169,98 @@ const MenuManagement = () => {
     }
   };
 
+  const handleManageOptions = async (itemId) => {
+    setSelectedItemId(itemId);
+    setOptionsModalVisible(true);
+    await loadItemOptions(itemId);
+  };
+
+  const loadItemOptions = async (itemId) => {
+    setLoadingOptions(true);
+    try {
+      const options = await getItemOptions(itemId);
+      setItemOptions(options);
+    } catch (error) {
+      message.error("Opsiyonlar yüklenirken bir hata oluştu");
+      console.error("Options load error:", error);
+    } finally {
+      setLoadingOptions(false);
+    }
+  };
+
+  const handleAddOption = async () => {
+    if (!newOptionName.trim()) {
+      message.error("Opsiyon adı gerekli");
+      return;
+    }
+    if (newOptionValues.length === 0 || newOptionValues.every(v => !v.name.trim())) {
+      message.error("En az bir değer eklemelisiniz");
+      return;
+    }
+    try {
+      // Önce opsiyonu oluştur
+      const optionResult = await createItemOption(selectedItemId, newOptionName.trim(), 'select', 0, true);
+      const optionId = optionResult.optionId;
+      
+      // Sonra değerleri ekle
+      for (const value of newOptionValues) {
+        if (value.name.trim()) {
+          await createOptionValue(optionId, value.name.trim(), value.price || 0, 0, true);
+        }
+      }
+      
+      setNewOptionName('');
+      setNewOptionValues([{ name: '', price: 0 }]);
+      await loadItemOptions(selectedItemId);
+      message.success("Opsiyon ve değerler eklendi");
+    } catch (error) {
+      message.error("Opsiyon eklenirken bir hata oluştu");
+      console.error("Option add error:", error);
+    }
+  };
+
+  const handleAddValueRow = () => {
+    setNewOptionValues([...newOptionValues, { name: '', price: 0 }]);
+  };
+
+  const handleRemoveValueRow = (index) => {
+    const newValues = newOptionValues.filter((_, i) => i !== index);
+    if (newValues.length === 0) {
+      setNewOptionValues([{ name: '', price: 0 }]);
+    } else {
+      setNewOptionValues(newValues);
+    }
+  };
+
+  const handleUpdateValue = (index, field, value) => {
+    const newValues = [...newOptionValues];
+    newValues[index][field] = value;
+    setNewOptionValues(newValues);
+  };
+
+  const handleDeleteOption = async (optionId) => {
+    try {
+      await deleteItemOption(optionId);
+      await loadItemOptions(selectedItemId);
+      message.success("Opsiyon silindi");
+    } catch (error) {
+      message.error("Opsiyon silinirken bir hata oluştu");
+      console.error("Option delete error:", error);
+    }
+  };
+
+
+  const handleDeleteOptionValue = async (valueId) => {
+    try {
+      await deleteOptionValue(valueId);
+      await loadItemOptions(selectedItemId);
+      message.success("Değer silindi");
+    } catch (error) {
+      message.error("Değer silinirken bir hata oluştu");
+      console.error("Option value delete error:", error);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
@@ -235,7 +341,7 @@ const MenuManagement = () => {
                     {
                       title: 'İşlemler',
                       key: 'actions',
-                      width: 200,
+                      width: 300,
                       render: (_, record) => (
                         <Space>
                           <Button
@@ -244,6 +350,12 @@ const MenuManagement = () => {
                             onClick={() => handleEditItem(record, category.categoryId)}
                           >
                             Düzenle
+                          </Button>
+                          <Button
+                            type="link"
+                            onClick={() => handleManageOptions(record.itemId)}
+                          >
+                            Opsiyonlar
                           </Button>
                           <Popconfirm
                             title="Bu ürünü silmek istediğinize emin misiniz?"
@@ -352,6 +464,155 @@ const MenuManagement = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Opsiyonlar Modal */}
+      <Modal
+        title="Ürün Opsiyonları"
+        open={optionsModalVisible}
+        onCancel={() => {
+          setOptionsModalVisible(false);
+          setNewOptionName('');
+          setNewOptionValues([{ name: '', price: 0 }]);
+        }}
+        footer={[
+          <Button key="close" onClick={() => setOptionsModalVisible(false)}>
+            Kapat
+          </Button>,
+        ]}
+        width={700}
+      >
+        {loadingOptions ? (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>Yükleniyor...</div>
+        ) : (
+          <div>
+            {/* Yeni Opsiyon Ekleme */}
+            <Card size="small" style={{ marginBottom: 16, backgroundColor: '#f5f5f5' }}>
+              <div style={{ marginBottom: 12, fontWeight: 'bold' }}>Yeni Opsiyon Ekle</div>
+              <Space style={{ width: '100%' }} direction="vertical" size="middle">
+                <Input
+                  placeholder="Opsiyon adı (örn: Boyut)"
+                  value={newOptionName}
+                  onChange={(e) => setNewOptionName(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+                <div>
+                  <div style={{ marginBottom: 8, fontSize: 12, color: '#666' }}>Değerler:</div>
+                  {newOptionValues.map((value, index) => (
+                    <Space key={index} style={{ width: '100%', marginBottom: 8 }}>
+                      <Input
+                        placeholder="Değer adı (örn: Küçük)"
+                        value={value.name}
+                        onChange={(e) => handleUpdateValue(index, 'name', e.target.value)}
+                        style={{ flex: 1 }}
+                      />
+                      <InputNumber
+                        placeholder="Fiyat"
+                        value={value.price}
+                        onChange={(val) => handleUpdateValue(index, 'price', val || 0)}
+                        step={0.01}
+                        precision={2}
+                        style={{ width: 120 }}
+                      />
+                      {newOptionValues.length > 1 && (
+                        <Button
+                          type="text"
+                          danger
+                          icon={<DeleteOutlined />}
+                          onClick={() => handleRemoveValueRow(index)}
+                        />
+                      )}
+                    </Space>
+                  ))}
+                  <Button
+                    type="dashed"
+                    block
+                    icon={<PlusOutlined />}
+                    onClick={handleAddValueRow}
+                    style={{ marginTop: 8 }}
+                  >
+                    Değer Ekle
+                  </Button>
+                </div>
+                <Button type="primary" block onClick={handleAddOption}>
+                  Opsiyonu Ekle
+                </Button>
+              </Space>
+            </Card>
+
+            {/* Mevcut Opsiyonlar */}
+            {itemOptions.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '40px 0', color: '#999' }}>
+                Henüz opsiyon yok. Yukarıdan yeni opsiyon ekleyin.
+              </div>
+            ) : (
+              itemOptions.map((option) => (
+                <Card
+                  key={option.optionId}
+                  size="small"
+                  style={{ marginBottom: 12 }}
+                  title={
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span>{option.optionName}</span>
+                      <Popconfirm
+                        title="Bu opsiyonu silmek istediğinize emin misiniz?"
+                        onConfirm={() => handleDeleteOption(option.optionId)}
+                        okText="Evet"
+                        cancelText="Hayır"
+                      >
+                        <Button type="text" size="small" danger icon={<DeleteOutlined />}>
+                          Sil
+                        </Button>
+                      </Popconfirm>
+                    </div>
+                  }
+                >
+                  {/* Mevcut Değerler */}
+                  {option.values && option.values.length > 0 ? (
+                    <div>
+                      {option.values.map((val) => (
+                        <div
+                          key={val.optionValueId}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            padding: '8px 12px',
+                            marginBottom: 4,
+                            backgroundColor: '#fafafa',
+                            borderRadius: 4,
+                          }}
+                        >
+                          <span>
+                            {val.valueName}
+                            {val.priceModifier !== 0 && (
+                              <span style={{ marginLeft: 8, color: val.priceModifier > 0 ? '#ff4d4f' : '#52c41a' }}>
+                                ({val.priceModifier > 0 ? '+' : ''}{val.priceModifier.toFixed(2)} ₺)
+                              </span>
+                            )}
+                          </span>
+                          <Popconfirm
+                            title="Bu değeri silmek istediğinize emin misiniz?"
+                            onConfirm={() => handleDeleteOptionValue(val.optionValueId)}
+                            okText="Evet"
+                            cancelText="Hayır"
+                          >
+                            <Button type="text" size="small" danger icon={<DeleteOutlined />} />
+                          </Popconfirm>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ color: '#999', fontSize: 12, textAlign: 'center', padding: '8px 0' }}>
+                      Henüz değer yok
+                    </div>
+                  )}
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+      </Modal>
+
     </div>
   );
 };

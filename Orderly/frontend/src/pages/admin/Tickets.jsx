@@ -202,6 +202,31 @@ const Tickets = () => {
                       title: 'Ürün Adı',
                       dataIndex: 'itemName',
                       key: 'itemName',
+                      render: (text, record) => (
+                        <div>
+                          <div style={{ fontWeight: 'bold', marginBottom: 4 }}>{text}</div>
+                          {record.options && record.options.length > 0 && (
+                            <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                              {record.options.map((opt, idx) => (
+                                <div key={idx} style={{ marginBottom: 2 }}>
+                                  <span style={{ fontWeight: 'bold' }}>{opt.optionName}:</span>{' '}
+                                  {opt.valueName || opt.customText || '-'}
+                                  {opt.priceModifier !== 0 && (
+                                    <span style={{ marginLeft: 4, color: opt.priceModifier > 0 ? '#ff4d4f' : '#52c41a' }}>
+                                      ({opt.priceModifier > 0 ? '+' : ''}{opt.priceModifier.toFixed(2)} ₺)
+                                    </span>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {record.specialInstructions && (
+                            <div style={{ fontSize: 12, color: '#1890ff', marginTop: 4, fontStyle: 'italic' }}>
+                              📝 {record.specialInstructions}
+                            </div>
+                          )}
+                        </div>
+                      ),
                     },
                     {
                       title: 'Kategori',

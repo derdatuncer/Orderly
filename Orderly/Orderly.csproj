@@ -1,4 +1,4 @@
-﻿<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props" Condition="Exists('..\packages\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.2.0.1\build\net46\Microsoft.CodeDom.Providers.DotNetCompilerPlatform.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -99,8 +99,11 @@
     <Compile Include="Models\DiningTable.cs" />
     <Compile Include="Models\MenuCategory.cs" />
     <Compile Include="Models\MenuItem.cs" />
+    <Compile Include="Models\ProductOption.cs" />
+    <Compile Include="Models\ProductOptionValue.cs" />
     <Compile Include="Models\Ticket.cs" />
     <Compile Include="Models\TicketItem.cs" />
+    <Compile Include="Models\TicketItemOption.cs" />
     <Compile Include="Models\OrderlyDbContext.cs" />
     <Compile Include="Default.aspx.cs">
       <DependentUpon>Default.aspx</DependentUpon>

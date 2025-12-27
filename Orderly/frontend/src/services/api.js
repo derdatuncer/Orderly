@@ -61,12 +61,19 @@ export const closeTicket = async (ticketId, paymentMethod, discount = 0, service
   return response.data;
 };
 
-export const addItemToTicket = async (ticketId, itemId, quantity, unitPrice) => {
-  const response = await api.post(`/tickets/${ticketId}/items`, {
+export const addItemToTicket = async (ticketId, itemId, quantity, unitPrice, options = null, specialInstructions = null) => {
+  const payload = {
     itemId,
     quantity,
     unitPrice,
-  });
+  };
+  if (options && options.length > 0) {
+    payload.options = options;
+  }
+  if (specialInstructions) {
+    payload.specialInstructions = specialInstructions;
+  }
+  const response = await api.post(`/tickets/${ticketId}/items`, payload);
   return response.data;
 };
 
@@ -142,6 +149,91 @@ export const updateItem = async (itemId, categoryId, itemName, price) => {
 
 export const deleteItem = async (itemId) => {
   const response = await api.delete(`/menu/items/${itemId}`);
+  return response.data;
+};
+
+// Product Options API
+export const getItemOptions = async (itemId) => {
+  const response = await api.get(`/menu/items/${itemId}/options`);
+  return response.data;
+};
+
+export const createItemOption = async (itemId, optionName, optionType, sortOrder = 0, isActive = true) => {
+  const response = await api.post(`/menu/items/${itemId}/options`, {
+    optionName,
+    optionType,
+    sortOrder,
+    isActive,
+  });
+  return response.data;
+};
+
+export const updateItemOption = async (optionId, optionName, optionType, sortOrder, isActive) => {
+  const response = await api.put(`/menu/options/${optionId}`, {
+    optionName,
+    optionType,
+    sortOrder,
+    isActive,
+  });
+  return response.data;
+};
+
+export const deleteItemOption = async (optionId) => {
+  const response = await api.delete(`/menu/options/${optionId}`);
+  return response.data;
+};
+
+export const createOptionValue = async (optionId, valueName, priceModifier = 0, sortOrder = 0, isActive = true) => {
+  const response = await api.post(`/menu/options/${optionId}/values`, {
+    valueName,
+    priceModifier,
+    sortOrder,
+    isActive,
+  });
+  return response.data;
+};
+
+export const updateOptionValue = async (valueId, valueName, priceModifier, sortOrder, isActive) => {
+  const response = await api.put(`/menu/option-values/${valueId}`, {
+    valueName,
+    priceModifier,
+    sortOrder,
+    isActive,
+  });
+  return response.data;
+};
+
+export const deleteOptionValue = async (valueId) => {
+  const response = await api.delete(`/menu/option-values/${valueId}`);
+  return response.data;
+};
+
+// Ticket Item Options API
+export const getTicketItemOptions = async (itemId) => {
+  const response = await api.get(`/tickets/items/${itemId}/options`);
+  return response.data;
+};
+
+export const addTicketItemOption = async (itemId, optionId, optionValueId = null, customText = null, priceModifier = null) => {
+  const payload = { optionId };
+  if (optionValueId !== null) payload.optionValueId = optionValueId;
+  if (customText !== null) payload.customText = customText;
+  if (priceModifier !== null) payload.priceModifier = priceModifier;
+  const response = await api.post(`/tickets/items/${itemId}/options`, payload);
+  return response.data;
+};
+
+export const updateTicketItemOption = async (optionId, optionValueId = null, customText = null, priceModifier = null) => {
+  const payload = {};
+  if (optionValueId !== null) payload.optionValueId = optionValueId;
+  if (customText !== null) payload.customText = customText;
+  if (priceModifier !== null) payload.priceModifier = priceModifier;
+  const response = await api.put(`/tickets/items/options/${optionId}`, payload);
+  return response.data;
+};
+
+export const deleteTicketItemOption = async (optionId) => {
+  const response = await api.delete(`/tickets/items/options/${optionId}`);
   return response.data;
 };
 

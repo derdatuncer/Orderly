@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -38,12 +39,18 @@ namespace Orderly.Models
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
 
+        [MaxLength(500)]
+        [Column("special_instructions")]
+        public string SpecialInstructions { get; set; }
+
         // Navigation properties
         [ForeignKey("TicketId")]
         public virtual Ticket Ticket { get; set; }
 
         [ForeignKey("ItemId")]
         public virtual MenuItem MenuItem { get; set; }
+
+        public virtual ICollection<TicketItemOption> Options { get; set; }
     }
 }
 
