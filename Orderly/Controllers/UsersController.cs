@@ -174,6 +174,39 @@ namespace Orderly.Controllers
             }
         }
 
+        // POST: api/users/login
+        [HttpPost]
+        [Route("api/users/login")]
+        public IHttpActionResult Login([FromBody] dynamic data)
+        {
+            try
+            {
+                if (data == null)
+                    return BadRequest("Şifre gerekli");
+
+                string password = data.password?.ToString() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(password))
+                    return BadRequest("Şifre gerekli");
+
+                var user = db.Users
+                    .FirstOrDefault(u => u.Password == password);
+
+                if (user == null)
+                    return StatusCode(System.Net.HttpStatusCode.Unauthorized);
+
+                return Ok(new
+                {
+                    userId = user.UserId,
+                    username = user.Username,
+                    role = user.Role
+                });
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
         protected override void Dispose(bool disposing)
         {
             if (disposing)

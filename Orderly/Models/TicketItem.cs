@@ -43,7 +43,6 @@ namespace Orderly.Models
         [Column("special_instructions")]
         public string SpecialInstructions { get; set; }
 
-        // Navigation properties
         [ForeignKey("TicketId")]
         public virtual Ticket Ticket { get; set; }
 

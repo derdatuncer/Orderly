@@ -11,7 +11,7 @@ namespace Orderly.Controllers
     {
         private OrderlyDbContext db = new OrderlyDbContext();
 
-        // GET: api/reports/daily-revenue?startDate=2024-10-01&endDate=2024-10-31
+        // GET: api/reports/daily-revenue
         [HttpGet]
         [Route("api/reports/daily-revenue")]
         public IHttpActionResult GetDailyRevenue(string startDate = null, string endDate = null)
@@ -59,7 +59,7 @@ namespace Orderly.Controllers
             }
         }
 
-        // GET: api/reports/revenue-growth?startDate=2024-10-01&endDate=2024-10-31
+        // GET: api/reports/revenue-growth
         [HttpGet]
         [Route("api/reports/revenue-growth")]
         public IHttpActionResult GetRevenueGrowth(string startDate = null, string endDate = null)
@@ -83,38 +83,45 @@ namespace Orderly.Controllers
                     end = end.Date;
                 }
 
-                // Entity Framework'te LAG window function yok, bu yüzden raw SQL kullanıyoruz
-                var revenueGrowth = db.Database.SqlQuery<RevenueGrowthResult>(@"
-                    WITH DailyRevenue AS (
-                        SELECT 
-                            CAST(closed_at AS DATE) as date,
-                            SUM(closed_total) as revenue
-                        FROM orderly.tickets
-                        WHERE status = 'closed'
-                            AND closed_at IS NOT NULL
-                            AND CAST(closed_at AS DATE) >= @p0
-                            AND CAST(closed_at AS DATE) <= @p1
-                        GROUP BY CAST(closed_at AS DATE)
-                    )
-                    SELECT 
-                        date,
-                        revenue,
-                        LAG(revenue) OVER (ORDER BY date) as previous_revenue,
-                        CASE 
-                            WHEN LAG(revenue) OVER (ORDER BY date) > 0 
-                            THEN ((revenue - LAG(revenue) OVER (ORDER BY date)) / LAG(revenue) OVER (ORDER BY date)) * 100
-                            ELSE NULL
-                        END as growth_percentage
-                    FROM DailyRevenue
-                    ORDER BY date", start, end).ToList();
+                // Günlük hasılat verilerini al
+                var dailyRevenue = db.Tickets
+                    .Where(t => t.Status == "closed" && t.ClosedAt.HasValue)
+                    .Where(t => DbFunctions.TruncateTime(t.ClosedAt.Value) >= start &&
+                               DbFunctions.TruncateTime(t.ClosedAt.Value) <= end)
+                    .GroupBy(t => DbFunctions.TruncateTime(t.ClosedAt.Value))
+                    .Select(g => new
+                    {
+                        Date = g.Key,
+                        Revenue = g.Sum(t => t.ClosedTotal ?? 0)
+                    })
+                    .OrderBy(r => r.Date)
+                    .ToList();
 
-                var result = revenueGrowth.Select(r => new
+                // Önceki gün verilerini hesapla
+                var result = new List<object>();
+                for (int i = 0; i < dailyRevenue.Count; i++)
                 {
-                    date = r.Date,
-                    revenue = r.Revenue,
-                    previousRevenue = r.PreviousRevenue,
-                    growthPercentage = r.GrowthPercentage
-                }).ToList();
+                    var current = dailyRevenue[i];
+                    decimal? previousRevenue = null;
+                    decimal? growthPercentage = null;
+
+                    if (i > 0)
+                    {
+                        previousRevenue = dailyRevenue[i - 1].Revenue;
+                        if (previousRevenue > 0)
+                        {
+                            growthPercentage = ((current.Revenue - previousRevenue.Value) / previousRevenue.Value) * 100;
+                        }
+                    }
+
+                    result.Add(new
+                    {
+                        date = current.Date,
+                        revenue = current.Revenue,
+                        previousRevenue = previousRevenue,
+                        growthPercentage = growthPercentage
+                    });
+                }
 
                 return Ok(result);
             }
@@ -124,7 +131,7 @@ namespace Orderly.Controllers
             }
         }
 
-        // GET: api/reports/summary?startDate=2024-10-01&endDate=2024-10-31
+        // GET: api/reports/summary
         [HttpGet]
         [Route("api/reports/summary")]
         public IHttpActionResult GetSummary(string startDate = null, string endDate = null)
@@ -174,7 +181,7 @@ namespace Orderly.Controllers
         }
 
         // Raw SQL sonuçları için helper class
-        private class RevenueGrowthResult
+        public class RevenueGrowthResult
         {
             public DateTime Date { get; set; }
             public decimal Revenue { get; set; }

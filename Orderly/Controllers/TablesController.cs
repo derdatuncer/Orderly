@@ -4,6 +4,7 @@ using System.Data.Entity;
 using System.Linq;
 using System.Web.Http;
 using Orderly.Models;
+using Orderly.Services;
 
 namespace Orderly.Controllers
 {
@@ -25,7 +26,7 @@ namespace Orderly.Controllers
 
                 // Aktif ticket'ları getir (her masa için en son aktif ticket)
                 var allActiveTickets = db.Tickets
-                    .Include(t => t.Items)
+                    .Include(t => t.Items.Select(ti => ti.Options))
                     .Where(t => t.TableId.HasValue && (t.Status == "open" || t.Status == "printed"))
                     .OrderByDescending(t => t.OpenedAt)
                     .ToList()
@@ -35,6 +36,7 @@ namespace Orderly.Controllers
 
                 var result = tables.Select(t => 
                 {
+                    //her masa için en son aktif ticket, birden fazla activeTicket olmamalı (bugfix)
                     var activeTicket = allActiveTickets.FirstOrDefault(tk => tk.TableId == t.TableId);
                     
                     return new
@@ -46,7 +48,8 @@ namespace Orderly.Controllers
                         ticketId = activeTicket?.TicketId,
                         mealReady = activeTicket?.MealReady ?? false,
                         openedAt = activeTicket?.OpenedAt,
-                        total = activeTicket != null ? activeTicket.Items.Sum(ti => ti.LineTotal) : 0
+                        total = activeTicket != null ? activeTicket.Items.Sum(ti => 
+                            ti.LineTotal + (ti.Options != null ? ti.Options.Sum(opt => opt.PriceModifier) : 0)) : 0
                     };
                 }).ToList();
 
@@ -80,6 +83,9 @@ namespace Orderly.Controllers
 
                 db.DiningTables.Add(table);
                 db.SaveChanges();
+
+                // SSE event gönder
+                EventBroadcaster.Broadcast("tables-updated", new { action = "table-created" });
 
                 return Ok(new { tableId = table.TableId, tableCode = table.TableCode, status = table.Status });
             }
@@ -124,6 +130,9 @@ namespace Orderly.Controllers
                 db.DiningTables.Remove(table);
                 db.SaveChanges();
 
+                // SSE event gönder
+                EventBroadcaster.Broadcast("tables-updated", new { action = "table-deleted" });
+
                 return Ok(new { message = "Masa silindi" });
             }
             catch (Exception ex)
@@ -152,7 +161,7 @@ namespace Orderly.Controllers
 
                 // Aktif adisyon ve ürünleri
                 var activeTicket = db.Tickets
-                    .Include(t => t.Items)
+                    .Include(t => t.Items.Select(ti => ti.Options))
                     .Where(t => t.TableId == id && (t.Status == "open" || t.Status == "printed"))
                     .OrderByDescending(t => t.OpenedAt)
                     .FirstOrDefault();
@@ -168,7 +177,8 @@ namespace Orderly.Controllers
                         status = activeTicket.Status,
                         openedAt = activeTicket.OpenedAt,
                         mealReady = activeTicket.MealReady,
-                        total = activeTicket.Items.Sum(ti => ti.LineTotal)
+                        total = activeTicket.Items.Sum(ti => 
+                            ti.LineTotal + (ti.Options != null ? ti.Options.Sum(opt => opt.PriceModifier) : 0))
                     };
 
                     // Ticket items'ı getir (item_name zaten kaydedilmiş)
@@ -189,8 +199,18 @@ namespace Orderly.Controllers
                         .ToList()
                         .ToDictionary(mi => mi.ItemId, mi => mi);
 
-                    // Items'ı oluştur
-                    items = ticketItems.Select(ti =>
+                    // Opsiyonları al
+                    var ticketItemIds = ticketItems.Select(ti => ti.OrderItemId).ToList();
+                    var ticketItemOptions = db.TicketItemOptions
+                        .Include(tio => tio.Option)
+                        .Include(tio => tio.OptionValue)
+                        .Where(tio => ticketItemIds.Contains(tio.TicketItemId))
+                        .ToList()
+                        .GroupBy(tio => tio.TicketItemId)
+                        .ToDictionary(g => g.Key, g => g.ToList());
+
+                    // Items'ı oluştur ve grupla (aynı ürün + aynı opsiyon kombinasyonu birleştir)
+                    var itemsWithOptions = ticketItems.Select(ti =>
                     {
                         string categoryName = "(Silinmiş Kategori)";
                         if (ti.ItemId.HasValue && menuItems.ContainsKey(ti.ItemId.Value))
@@ -202,16 +222,112 @@ namespace Orderly.Controllers
                             }
                         }
 
+                        // Opsiyonları hazırla ve key oluştur
+                        var optionsList = new List<object>();
+                        decimal optionsTotal = 0;
+                        var optionDescriptions = new List<string>();
+                        var optionKeyParts = new List<string>(); // Gruplama için key
+                        
+                        if (ticketItemOptions.ContainsKey(ti.OrderItemId))
+                        {
+                            // Opsiyonları sıralı olarak al (tutarlı key için)
+                            var sortedOptions = ticketItemOptions[ti.OrderItemId]
+                                .OrderBy(tio => tio.OptionId)
+                                .ThenBy(tio => tio.OptionValueId ?? 0)
+                                .ThenBy(tio => tio.CustomText ?? "")
+                                .ToList();
+                            
+                            foreach (var tio in sortedOptions)
+                            {
+                                optionsTotal += tio.PriceModifier;
+                                
+                                // Opsiyon açıklaması oluştur
+                                string optionDesc = "";
+                                if (tio.Option != null)
+                                {
+                                    if (!string.IsNullOrEmpty(tio.OptionValue?.ValueName))
+                                    {
+                                        optionDesc = tio.OptionValue.ValueName;
+                                    }
+                                    else if (!string.IsNullOrEmpty(tio.CustomText))
+                                    {
+                                        optionDesc = tio.CustomText;
+                                    }
+                                    else
+                                    {
+                                        optionDesc = tio.Option.OptionName;
+                                    }
+                                    
+                                    if (!string.IsNullOrEmpty(optionDesc))
+                                    {
+                                        optionDescriptions.Add(optionDesc);
+                                    }
+                                    
+                                    // Key için opsiyon bilgisi
+                                    optionKeyParts.Add($"{tio.OptionId}_{tio.OptionValueId}_{tio.CustomText ?? ""}");
+                                }
+                                
+                                optionsList.Add(new
+                                {
+                                    ticketItemOptionId = tio.TicketItemOptionId,
+                                    optionId = tio.OptionId,
+                                    optionName = tio.Option != null ? tio.Option.OptionName : "(Silinmiş Opsiyon)",
+                                    optionValueId = tio.OptionValueId,
+                                    valueName = tio.OptionValue != null ? tio.OptionValue.ValueName : (string)null,
+                                    customText = tio.CustomText,
+                                    priceModifier = tio.PriceModifier
+                                });
+                            }
+                        }
+
+                        // Gruplama key'i: itemId + opsiyon kombinasyonu + specialInstructions
+                        string specialInstructionsKey = ti.SpecialInstructions ?? "";
+                        string groupKey = $"{ti.ItemId ?? 0}_{ti.ItemName}_{string.Join("|", optionKeyParts)}_{specialInstructionsKey}";
+
+                        // Ürün adını opsiyonlarla birlikte oluştur
+                        string displayItemName = ti.ItemName ?? "(Silinmiş Ürün)";
+                        if (optionDescriptions.Count > 0)
+                        {
+                            displayItemName = $"{displayItemName} + {string.Join(" + ", optionDescriptions)}";
+                        }
+
                         return new
                         {
-                            orderItemId = ti.OrderItemId,
-                            quantity = ti.Quantity,
-                            unitPrice = ti.UnitPrice,
-                            lineTotal = ti.LineTotal,
-                            itemName = ti.ItemName ?? "(Silinmiş Ürün)",
-                            categoryName = categoryName
+                            GroupKey = groupKey,
+                            OrderItemId = ti.OrderItemId,
+                            Quantity = ti.Quantity,
+                            UnitPrice = ti.UnitPrice,
+                            LineTotal = ti.LineTotal + optionsTotal,
+                            ItemName = displayItemName,
+                            CategoryName = categoryName,
+                            SpecialInstructions = ti.SpecialInstructions,
+                            Options = optionsList,
+                            OptionsTotal = optionsTotal
                         };
-                    }).ToList<object>();
+                    }).ToList();
+
+                    // Aynı key'e sahip item'ları birleştir
+                    items = itemsWithOptions
+                        .GroupBy(item => item.GroupKey)
+                        .Select(g =>
+                        {
+                            var firstItem = g.First();
+                            var totalQuantity = g.Sum(item => item.Quantity);
+                            var totalLineTotal = g.Sum(item => item.LineTotal);
+                            
+                            return new
+                            {
+                                orderItemId = firstItem.OrderItemId, // İlk item'ın ID'si
+                                quantity = totalQuantity,
+                                unitPrice = firstItem.UnitPrice,
+                                lineTotal = totalLineTotal,
+                                itemName = firstItem.ItemName,
+                                categoryName = firstItem.CategoryName,
+                                specialInstructions = firstItem.SpecialInstructions,
+                                options = firstItem.Options
+                            };
+                        })
+                        .ToList<object>();
                 }
 
                 return Ok(new

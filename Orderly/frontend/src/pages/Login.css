@@ -1,0 +1,95 @@
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: #f5f5f5;
+  padding: 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 450px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-header h1 {
+  font-size: 36px;
+  font-weight: bold;
+  color: #000000;
+  margin-bottom: 8px;
+}
+
+.login-header p {
+  font-size: 16px;
+  color: #666;
+  margin: 0;
+}
+
+.password-display {
+  margin-bottom: 24px;
+}
+
+.password-input {
+  font-size: 24px;
+  text-align: center;
+  letter-spacing: 8px;
+  height: 60px;
+  font-weight: bold;
+}
+
+.keypad-container {
+  width: 100%;
+}
+
+.keypad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.keypad-grid .keypad-button:last-child {
+  grid-column: 2 / 3;
+}
+
+.keypad-button {
+  height: 70px;
+  font-size: 24px;
+  font-weight: bold;
+  border-radius: 8px;
+  border: 2px solid #d9d9d9;
+  transition: all 0.2s;
+}
+
+.keypad-button:hover:not(:disabled) {
+  border-color: #1890ff;
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(24, 144, 255, 0.3);
+}
+
+.keypad-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.keypad-actions {
+  display: grid;
+  grid-template-columns: 1fr 2fr 1fr;
+  gap: 12px;
+}
+
+.action-button {
+  height: 60px;
+  font-size: 18px;
+}
+
+.login-button {
+  font-size: 18px;
+  font-weight: bold;
+}

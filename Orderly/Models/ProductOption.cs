@@ -33,7 +33,6 @@ namespace Orderly.Models
         [Column("is_active")]
         public bool IsActive { get; set; }
 
-        // Navigation properties
         [ForeignKey("ItemId")]
         public virtual MenuItem MenuItem { get; set; }
 

@@ -24,7 +24,6 @@ namespace Orderly.Models
         [Column("price")]
         public decimal Price { get; set; }
 
-        // Navigation properties
         [ForeignKey("CategoryId")]
         public virtual MenuCategory Category { get; set; }
 

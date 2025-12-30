@@ -20,7 +20,6 @@ namespace Orderly.Models
         [Column("sort_order")]
         public int SortOrder { get; set; }
 
-        // Navigation property
         public virtual ICollection<MenuItem> Items { get; set; }
     }
 }

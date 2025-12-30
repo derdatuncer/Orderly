@@ -9,6 +9,7 @@ namespace Orderly
         protected void Application_Start(object sender, EventArgs e)
         {
             GlobalConfiguration.Configure(WebApiConfig.Register);
+            // SwaggerConfig.Register() artık PreApplicationStartMethod ile otomatik çağrılıyor
         }
     }
 }

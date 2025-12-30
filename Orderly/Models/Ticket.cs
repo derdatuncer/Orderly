@@ -46,7 +46,6 @@ namespace Orderly.Models
         [Column("closed_total")]
         public decimal? ClosedTotal { get; set; }
 
-        // Navigation properties
         [ForeignKey("TableId")]
         public virtual DiningTable Table { get; set; }
 

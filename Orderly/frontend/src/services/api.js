@@ -291,5 +291,17 @@ export const getSummary = async (startDate = null, endDate = null) => {
   return response.data;
 };
 
+// Auth API
+export const login = async (password) => {
+  const response = await api.post('/users/login', { password });
+  return response.data;
+};
+
+// Kitchen API
+export const markMealReady = async (ticketId) => {
+  const response = await api.post(`/tickets/${ticketId}/meal-ready`);
+  return response.data;
+};
+
 export default api;
 

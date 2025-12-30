@@ -481,6 +481,19 @@ namespace Orderly.Controllers
 
                 return Ok(new { message = "Opsiyon silindi" });
             }
+            catch (System.Data.Entity.Infrastructure.DbUpdateException dbEx)
+            {
+                // Foreign key constraint hatası
+                if (dbEx.InnerException != null && dbEx.InnerException.InnerException != null)
+                {
+                    var innerMsg = dbEx.InnerException.InnerException.Message;
+                    if (innerMsg.Contains("FOREIGN KEY") || innerMsg.Contains("REFERENCE"))
+                    {
+                        return BadRequest("Bu opsiyon adisyonlarda kullanılıyor. Veritabanı constraint'i düzeltilmemiş olabilir. FixOptionDeleteConstraint.sql script'ini çalıştırın.");
+                    }
+                }
+                return InternalServerError(dbEx);
+            }
             catch (Exception ex)
             {
                 return InternalServerError(ex);
@@ -611,6 +624,19 @@ namespace Orderly.Controllers
                 db.SaveChanges();
 
                 return Ok(new { message = "Opsiyon değeri silindi" });
+            }
+            catch (System.Data.Entity.Infrastructure.DbUpdateException dbEx)
+            {
+                // Foreign key constraint hatası
+                if (dbEx.InnerException != null && dbEx.InnerException.InnerException != null)
+                {
+                    var innerMsg = dbEx.InnerException.InnerException.Message;
+                    if (innerMsg.Contains("FOREIGN KEY") || innerMsg.Contains("REFERENCE"))
+                    {
+                        return BadRequest("Bu opsiyon değeri adisyonlarda kullanılıyor. Veritabanı constraint'i düzeltilmemiş olabilir. FixOptionDeleteConstraint.sql script'ini çalıştırın.");
+                    }
+                }
+                return InternalServerError(dbEx);
             }
             catch (Exception ex)
             {

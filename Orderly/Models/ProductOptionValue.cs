@@ -32,7 +32,6 @@ namespace Orderly.Models
         [Column("is_active")]
         public bool IsActive { get; set; }
 
-        // Navigation properties
         [ForeignKey("OptionId")]
         public virtual ProductOption Option { get; set; }
 

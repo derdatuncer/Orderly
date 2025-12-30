@@ -2,46 +2,28 @@ import { useState } from 'react';
 import { Layout, Menu } from 'antd';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import {
-  TableOutlined,
-  FileTextOutlined,
-  BarChartOutlined,
-  AppstoreOutlined,
-  UserOutlined,
+  ClockCircleOutlined,
+  CheckCircleOutlined,
   LogoutOutlined,
 } from '@ant-design/icons';
 
 const { Header, Sider, Content } = Layout;
 
-const AdminLayout = () => {
+const KitchenLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
   const menuItems = [
     {
-      key: '/admin/tables',
-      icon: <TableOutlined />,
-      label: 'Masalar',
+      key: '/kitchen/tickets',
+      icon: <ClockCircleOutlined />,
+      label: 'Hazırlanıyor',
     },
     {
-      key: '/admin/tickets',
-      icon: <FileTextOutlined />,
-      label: 'Adisyonlar',
-    },
-    {
-      key: '/admin/reports',
-      icon: <BarChartOutlined />,
-      label: 'Raporlar',
-    },
-    {
-      key: '/admin/menu',
-      icon: <AppstoreOutlined />,
-      label: 'Menü Yönetimi',
-    },
-    {
-      key: '/admin/users',
-      icon: <UserOutlined />,
-      label: 'Kullanıcı Yönetimi',
+      key: '/kitchen/ready',
+      icon: <CheckCircleOutlined />,
+      label: 'Takip',
     },
     {
       type: 'divider',
@@ -122,7 +104,7 @@ const AdminLayout = () => {
           }}
         >
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 500, color: '#262626' }}>
-            Yönetici Paneli
+            Mutfak Paneli
           </h2>
         </Header>
         <Content
@@ -142,5 +124,4 @@ const AdminLayout = () => {
   );
 };
 
-export default AdminLayout;
-
+export default KitchenLayout;

@@ -23,10 +23,8 @@ namespace Orderly.Models
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
-            // Remove pluralization convention
             modelBuilder.Conventions.Remove<PluralizingTableNameConvention>();
 
-            // Configure relationships
             modelBuilder.Entity<MenuItem>()
                 .HasRequired(m => m.Category)
                 .WithMany(c => c.Items)
@@ -68,14 +66,12 @@ namespace Orderly.Models
                 .HasForeignKey(po => po.ItemId)
                 .WillCascadeOnDelete(true);
 
-            // ProductOptionValue relationships
             modelBuilder.Entity<ProductOptionValue>()
                 .HasRequired(pov => pov.Option)
                 .WithMany(po => po.Values)
                 .HasForeignKey(pov => pov.OptionId)
                 .WillCascadeOnDelete(true);
 
-            // TicketItemOption relationships
             modelBuilder.Entity<TicketItemOption>()
                 .HasRequired(tio => tio.TicketItem)
                 .WithMany(ti => ti.Options)
@@ -83,7 +79,7 @@ namespace Orderly.Models
                 .WillCascadeOnDelete(true);
 
             modelBuilder.Entity<TicketItemOption>()
-                .HasRequired(tio => tio.Option)
+                .HasOptional(tio => tio.Option)
                 .WithMany(po => po.TicketItemOptions)
                 .HasForeignKey(tio => tio.OptionId)
                 .WillCascadeOnDelete(false);

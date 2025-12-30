@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, Button, Drawer, Input, Select, Table, Space, InputNumber, Modal, App, Collapse } from 'antd';
 import { PlusOutlined, PrinterOutlined, CloseOutlined, DeleteOutlined, PercentageOutlined, StopOutlined, EditOutlined } from '@ant-design/icons';
+import { useLocation } from 'react-router-dom';
 import { getTables, createTable, getTableDetails, deleteTable, openTicket, printTicket, closeTicket, cancelTicket, reopenTicket, addItemToTicket, removeItemFromTicket, getMenu, getItemOptions } from '../../services/api';
 
 const { Option } = Select;
@@ -8,6 +9,9 @@ const { Panel } = Collapse;
 
 const Tables = () => {
   const { message, modal } = App.useApp();
+  const location = useLocation();
+  const isWaiter = location.pathname.startsWith('/waiter');
+  const isAdmin = location.pathname.startsWith('/admin');
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(false);
   const [drawerVisible, setDrawerVisible] = useState(false);
@@ -22,7 +26,6 @@ const Tables = () => {
   const [discountType, setDiscountType] = useState('tl'); // yüzde veya tl
   const [serviceCharge, setServiceCharge] = useState(0);
   const [serviceChargeType, setServiceChargeType] = useState('tl'); // yüzde veya tl
-  const [isAdmin] = useState(true); // Geçici: daha sonra kullabıcı girişi yapılacak
   const [addTableModalVisible, setAddTableModalVisible] = useState(false);
   const [addItemModalVisible, setAddItemModalVisible] = useState(false);
   const [selectedItemForAdd, setSelectedItemForAdd] = useState(null);
@@ -31,21 +34,22 @@ const Tables = () => {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [loadingOptions, setLoadingOptions] = useState(false);
 
-  useEffect(() => {
-    loadTables();
-    loadMenu();
-  }, []);
-
-  const loadTables = async () => {
-    setLoading(true);
+  const loadTables = async (showLoading = false) => {
+    if (showLoading) {
+      setLoading(true);
+    }
     try {
       const data = await getTables();
       setTables(data);
     } catch (error) {
-      message.error("Masalar yüklenirken bir hata oluştu");
+      if (showLoading) {
+        message.error("Masalar yüklenirken bir hata oluştu");
+      }
       console.error("Tables load error:",error);
     } finally {
-      setLoading(false);
+      if (showLoading) {
+        setLoading(false);
+      }
     }
   };
 
@@ -67,6 +71,37 @@ const Tables = () => {
       return null;
     }
   };
+
+  useEffect(() => {
+    loadTables(true); // İlk yüklemede loading göster
+    loadMenu();
+    
+    // SSE ile gerçek zamanlı yenileme
+    const eventSource = new EventSource(`${window.location.origin}/api/events`);
+    
+    const handleTablesUpdated = (event) => {
+      // Masaları yenile
+      loadTables(false);
+      
+      // Eğer drawer açıksa, table details'i de yenile
+      if (drawerVisible && selectedTable) {
+        loadTableDetails(selectedTable.tableId);
+      }
+    };
+    
+    eventSource.addEventListener('tables-updated', handleTablesUpdated);
+    
+    eventSource.onerror = (error) => {
+      console.error('SSE connection error:', error);
+      // Bağlantı hatası durumunda eventSource'u kapat
+      eventSource.close();
+    };
+    
+    return () => {
+      eventSource.removeEventListener('tables-updated', handleTablesUpdated);
+      eventSource.close();
+    };
+  }, [drawerVisible, selectedTable]);
 
   const handleTableClick = async (table) => {
     setSelectedTable(table);
@@ -90,7 +125,7 @@ const Tables = () => {
       await createTable(newTableCode.trim());
       setNewTableCode('');
       setAddTableModalVisible(false);
-      await loadTables();
+      await loadTables(false);
       setLoading(false);
       return Promise.resolve(true);
     } catch (error) {
@@ -114,7 +149,7 @@ const Tables = () => {
       onOk: async () => {
         try {
           await deleteTable(tableId);
-          await loadTables();
+          await loadTables(true); // Manuel işlem, loading göster
         } catch (error) {
           message.error("Masa silinirken bir hata oluştu");
           console.error("Table delete error:",error);
@@ -237,7 +272,7 @@ const Tables = () => {
       setSelectedOptions({});
       setSpecialInstructions('');
       await loadTableDetails(selectedTable.tableId);
-      loadTables();
+      loadTables(false);
       message.success("Ürün eklendi");
     } catch (error) {
       message.error("Ürün eklendiğinde bir hata oluştu");
@@ -253,7 +288,7 @@ const Tables = () => {
     try {
       await removeItemFromTicket(itemId);
       await loadTableDetails(selectedTable.tableId);
-      loadTables();
+      loadTables(false);
     } catch (error) {
       message.error("Ürün silinirken bir hata oluştu");
       console.error("Item remove error:",error);
@@ -266,7 +301,7 @@ const Tables = () => {
     try {
       await printTicket(tableDetails.ticket.ticketId);
       await loadTableDetails(selectedTable.tableId);
-      loadTables();
+      loadTables(false);
     } catch (error) {
       message.error("Adisyon yazdırılırken bir hata oluştu");
       console.error("Ticket print error:",error);
@@ -286,7 +321,7 @@ const Tables = () => {
         try {
           await cancelTicket(tableDetails.ticket.ticketId);
           await loadTableDetails(selectedTable.tableId);
-          loadTables();
+          loadTables(false);
         } catch (error) {
           message.error("Adisyon iptal edilirken bir hata oluştu");
           console.error("Ticket cancel error:",error);
@@ -308,7 +343,7 @@ const Tables = () => {
         try {
           await reopenTicket(tableDetails.ticket.ticketId);
           await loadTableDetails(selectedTable.tableId);
-          loadTables();
+          loadTables(false);
         } catch (error) {
           message.error("Adisyon tekrar açılırken bir hata oluştu");
           console.error("Ticket reopen error:",error);
@@ -331,7 +366,7 @@ const Tables = () => {
       setDrawerVisible(false);
       setDiscount(0);
       setServiceCharge(0);
-      loadTables();
+      loadTables(false);
     } catch (error) {
       message.error("Adisyon kapatılırken bir hata oluştu");
       console.error("Table close error:",error);
@@ -471,25 +506,27 @@ const Tables = () => {
             }}
             styles={{ body: { padding: 16 } }}
           >
-            <Button
-              type="text"
-              danger
-              icon={<DeleteOutlined />}
-              size="small"
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                handleDeleteTable(table.tableId, table.tableCode, e);
-              }}
-              style={{
-                position: 'absolute',
-                top: 8,
-                right: 8,
-                color: getTableTextColor(table.status),
-                opacity: 0.7,
-                zIndex: 10,
-              }}
-            />
+            {isAdmin && (
+              <Button
+                type="text"
+                danger
+                icon={<DeleteOutlined />}
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  handleDeleteTable(table.tableId, table.tableCode, e);
+                }}
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  color: getTableTextColor(table.status),
+                  opacity: 0.7,
+                  zIndex: 10,
+                }}
+              />
+            )}
             <div style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 8 }}>
               {table.tableCode}
             </div>
@@ -516,30 +553,30 @@ const Tables = () => {
             )}
           </Card>
         ))}
-        
-        {/* Masa Ekle Kartı */}
-        <Card
-          hoverable
-          onClick={() => {
-            setNewTableCode('');
-            setAddTableModalVisible(true);
-          }}
-          style={{
-            backgroundColor: '#e6f7ff',
-            border: '2px dashed #1890ff',
-            textAlign: 'center',
-            minHeight: 120,
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'center',
-            cursor: 'pointer',
-          }}
-        >
-          <PlusOutlined style={{ fontSize: 24, color: '#1890ff', marginBottom: 8 }} />
-          <div style={{ fontSize: 14, color: '#1890ff', fontWeight: 'bold' }}>
-            Masa Ekle
-          </div>
-        </Card>
+        {isAdmin && (
+          <Card
+            hoverable
+            onClick={() => {
+              setNewTableCode('');
+              setAddTableModalVisible(true);
+            }}
+            style={{
+              backgroundColor: '#e6f7ff',
+              border: '2px dashed #1890ff',
+              textAlign: 'center',
+              minHeight: 120,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              cursor: 'pointer',
+            }}
+          >
+            <PlusOutlined style={{ fontSize: 24, color: '#1890ff', marginBottom: 8 }} />
+            <div style={{ fontSize: 14, color: '#1890ff', fontWeight: 'bold' }}>
+              Masa Ekle
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Masa Detay Drawer */}
@@ -685,20 +722,6 @@ const Tables = () => {
               </div>
             )}
 
-            {tableDetails.ticket?.status === 'printed' && (
-              <>
-                <Button
-                  type="default"
-                  icon={<PlusOutlined />}
-                  block
-                  onClick={handleReopenTicket}
-                  style={{ marginBottom: 24 }}
-                >
-                  Adisyonu Geri Aç
-                </Button>
-              </>
-            )}
-
             {/* İşlem Butonları */}
             <Space direction="vertical" style={{ width: '100%' }} size="middle">
               {tableDetails.ticket?.status === 'open' && (
@@ -711,82 +734,101 @@ const Tables = () => {
                   >
                     Yazdır
                   </Button>
-                  <Button
-                    type="default"
-                    danger
-                    icon={<StopOutlined />}
-                    block
-                    onClick={handleCancelTicket}
-                  >
-                    Adisyonu İptal Et
-                  </Button>
+                  {isAdmin && (
+                    <Button
+                      type="default"
+                      danger
+                      icon={<StopOutlined />}
+                      block
+                      onClick={handleCancelTicket}
+                    >
+                      Adisyonu İptal Et
+                    </Button>
+                  )}
                 </>
               )}
-              
-              {tableDetails.ticket && tableDetails.ticket.status === 'printed' && (
+
+              {/* Admin için ek işlemler */}
+              {isAdmin && (
                 <>
-                  <div style={{ marginBottom: 16 }}>
-                    <h4>İndirim</h4>
-                    <Space style={{ width: '100%' }} direction="vertical">
-                      <Select
-                        value={discountType}
-                        onChange={setDiscountType}
-                        style={{ width: '100%' }}
-                      >
-                        <Option value="tl">TL Olarak</Option>
-                        <Option value="percent">Yüzde Olarak</Option>
-                      </Select>
-                      <InputNumber
-                        min={0}
-                        max={discountType === 'percent' ? 100 : calculateTotal()}
-                        value={discount || 0}
-                        onChange={(value) => setDiscount(value || 0)}
-                        style={{ width: '100%' }}
-                        addonAfter={discountType === 'percent' ? '%' : '₺'}
-                        placeholder={discountType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'}
-                      />
-                    </Space>
-                  </div>
+                  {tableDetails.ticket?.status === 'printed' && (
+                    <Button
+                      type="default"
+                      icon={<PlusOutlined />}
+                      block
+                      onClick={handleReopenTicket}
+                      style={{ marginBottom: 24 }}
+                    >
+                      Adisyonu Geri Aç
+                    </Button>
+                  )}
 
-                  <div style={{ marginBottom: 16 }}>
-                    <h4>Servis Ücreti</h4>
-                    <Space style={{ width: '100%' }} direction="vertical">
-                      <Select
-                        value={serviceChargeType}
-                        onChange={setServiceChargeType}
-                        style={{ width: '100%' }}
-                      >
-                        <Option value="tl">TL Olarak</Option>
-                        <Option value="percent">Yüzde Olarak</Option>
-                      </Select>
-                      <InputNumber
-                        min={0}
-                        value={serviceCharge || 0}
-                        onChange={(value) => setServiceCharge(value || 0)}
-                        style={{ width: '100%' }}
-                        addonAfter={serviceChargeType === 'percent' ? '%' : '₺'}
-                        placeholder={serviceChargeType === 'percent' ? 'Servis ücreti yüzdesi' : 'Servis ücreti tutarı'}
-                      />
-                    </Space>
-                  </div>
+                  {tableDetails.ticket && tableDetails.ticket.status === 'printed' && (
+                    <>
+                      <div style={{ marginBottom: 16 }}>
+                        <h4>İndirim</h4>
+                        <Space style={{ width: '100%' }} direction="vertical">
+                          <Select
+                            value={discountType}
+                            onChange={setDiscountType}
+                            style={{ width: '100%' }}
+                          >
+                            <Option value="tl">TL Olarak</Option>
+                            <Option value="percent">Yüzde Olarak</Option>
+                          </Select>
+                          <InputNumber
+                            min={0}
+                            max={discountType === 'percent' ? 100 : calculateTotal()}
+                            value={discount || 0}
+                            onChange={(value) => setDiscount(value || 0)}
+                            style={{ width: '100%' }}
+                            addonAfter={discountType === 'percent' ? '%' : '₺'}
+                            placeholder={discountType === 'percent' ? 'İndirim yüzdesi' : 'İndirim tutarı'}
+                          />
+                        </Space>
+                      </div>
 
-                  <Select
-                    value={paymentMethod}
-                    onChange={setPaymentMethod}
-                    style={{ width: '100%', marginBottom: 16 }}
-                  >
-                    <Option value="cash">Nakit</Option>
-                    <Option value="credit">Kart</Option>
-                  </Select>
-                  <Button
-                    type="primary"
-                    danger
-                    icon={<CloseOutlined />}
-                    block
-                    onClick={() => setCloseModalVisible(true)}
-                  >
-                    Masa Kapat ({paymentMethod === 'cash' ? 'Nakit' : 'Kart'})
-                  </Button>
+                      <div style={{ marginBottom: 16 }}>
+                        <h4>Servis Ücreti</h4>
+                        <Space style={{ width: '100%' }} direction="vertical">
+                          <Select
+                            value={serviceChargeType}
+                            onChange={setServiceChargeType}
+                            style={{ width: '100%' }}
+                          >
+                            <Option value="tl">TL Olarak</Option>
+                            <Option value="percent">Yüzde Olarak</Option>
+                          </Select>
+                          <InputNumber
+                            min={0}
+                            value={serviceCharge || 0}
+                            onChange={(value) => setServiceCharge(value || 0)}
+                            style={{ width: '100%' }}
+                            addonAfter={serviceChargeType === 'percent' ? '%' : '₺'}
+                            placeholder={serviceChargeType === 'percent' ? 'Servis ücreti yüzdesi' : 'Servis ücreti tutarı'}
+                          />
+                        </Space>
+                      </div>
+
+                      <Select
+                        value={paymentMethod}
+                        onChange={setPaymentMethod}
+                        style={{ width: '100%', marginBottom: 16 }}
+                      >
+                        <Option value="cash">Nakit</Option>
+                        <Option value="credit">Kart</Option>
+                      </Select>
+                      <Button
+                        type="primary"
+                        danger
+                        icon={<CloseOutlined />}
+                        block
+                        onClick={() => setCloseModalVisible(true)}
+                      >
+                        Masa Kapat ({paymentMethod === 'cash' ? 'Nakit' : 'Kart'})
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </Space>
