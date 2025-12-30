@@ -21,12 +21,6 @@
 
 gibi süreçleri dijital ortama taşıyarak, personel arasındaki iletişimi kolaylaştırmayı ve işletme verimliliğini artırmayı hedefleyen bir web uygulamasıdır.
 
-
-## ✅ Şu Ana Kadar Yapılanlar
-Özet İlerleme: Şu anda sitede yönetici layout'ı tamamlanmış bulunmakta. Gerekli tüm veritabanı tamamlanmış bulunmakta (sadece değişiklikler gerçekleşebilir)
-API tarafında admin için gerekli şeyler tamamlanmış bulunmakta. Diğer roller için gerekenler yönetici sayfasının bir türevi olacaktır (Mutfak personeli için sadece adisyon ekranı tasarlanacak, garson
-personeli için ise masa sayfası neredeyse aynı kalacaktır). Login sayfası, henüz tasarım kararlarının verilmemesi sebebiyle gerçekleşmemiştir (gerçekçi şifre girme vb.).
-
 ### Kullanıcı ve Rol Yönetimi
 
 - [X] Kullanıcı giriş (login) ekranı geliştirildi
