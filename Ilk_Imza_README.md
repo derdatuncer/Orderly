@@ -29,16 +29,10 @@ personeli için ise masa sayfası neredeyse aynı kalacaktır). Login sayfası, 
 
 ### Kullanıcı ve Rol Yönetimi
 
-- [ ] Kullanıcı giriş (login) ekranı geliştirildi
+- [X] Kullanıcı giriş (login) ekranı geliştirildi
 - [x] Yönetici, Garson, Mutfak rolleri tanımlandı
-- [ ] Rol bazlı yetkilendirme (her rol kendi sayfalarına erişiyor)
+- [X] Rol bazlı yetkilendirme (her rol kendi sayfalarına erişiyor)
 - [x] Yönetici panelinden kullanıcı ekleme/silme işlemleri
-
-Kısaca durum:
-
-> Şu anda sistemde login kısmı yapılmadı. Üç rol için en detaylısı olan 'Admin' rolü tamamlandı. Diğer rollerin göreceği sayfalar adminin bir varyasyonu olacak.
-
----
 
 ### Menü Yönetimi Modülü
 
@@ -57,15 +51,9 @@ Durum özeti:
 - [x] Garson/Admin için adisyon oluşturma ekranı geliştirildi
 - [x] Adisyona ürün ekleme / miktar güncelleme işlemleri yapıldı
 - [x] Adisyon verilerinin veritabanına kaydedilmesi sağlandı
-- [ ] Mutfak ekranında açık adisyonların/siparişlerin görüntülenmesi
+- [X] Mutfak ekranında açık adisyonların/siparişlerin görüntülenmesi
 - [x] Sadece yönetici kullanıcının adisyon kapatabilmesi (güvenlik amaçlı)
 - [x] Adisyon geçmişi / eski adisyonların görüntülenmesi
-
-Durum özeti:
-
-> Garson, masa seçip siparişleri girebilmekte ve yönetici adisyonları kapatabilmektedir.
-
----
 
 ### Ödeme Yönetimi
 
@@ -85,16 +73,10 @@ Durum özeti:
 
 - [x] Yöneticiye özel raporlama sayfası eklendi
 - [x] Günlük satış raporu veritabanından çekilmekte
-- [ ] En çok satılan ürünlerin listelenmesi sağlandı
 - [x] Haftalık satış raporu
 - [x] Aylık satış raporu
 - [x] Performans tablosu / grafikleri
 
-Durum özeti:
-
-> Yönetici kullanıcı, şu an için temel satış raporlarını ve en çok satılan ürünleri görüntüleyebilmektedir.
-
----
 
 ## Arayüz (UI) Durumu
 
@@ -105,6 +87,4 @@ PDF’de belirlenen taslaklara benzer şekilde şu ekranlar oluşturulmuştur:
 - [x] **Raporlar** sayfası
 - [x] **Menü Yönetimi** sayfası
 - [x] **Kullanıcı Yönetimi** sayfası
-
-PDF'de belirtilmeyen Garson ve Mutfak Personelleri layoutları (hali hazırda var olan sayfalarla neredeyse aynı) henüz tamamlanmamıştır.
 
