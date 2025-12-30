@@ -180,6 +180,80 @@ namespace Orderly.Controllers
             }
         }
 
+        // GET: api/reports/top-selling-products
+        [HttpGet]
+        [Route("api/reports/top-selling-products")]
+        public IHttpActionResult GetTopSellingProducts(string startDate = null, string endDate = null)
+        {
+            try
+            {
+                DateTime start = DateTime.UtcNow.Date;
+                DateTime end = DateTime.UtcNow.Date;
+
+                if (!string.IsNullOrEmpty(startDate))
+                {
+                    if (!DateTime.TryParse(startDate, out start))
+                        return BadRequest("Geçersiz başlangıç tarihi formatı");
+                    start = start.Date;
+                }
+
+                if (!string.IsNullOrEmpty(endDate))
+                {
+                    if (!DateTime.TryParse(endDate, out end))
+                        return BadRequest("Geçersiz bitiş tarihi formatı");
+                    end = end.Date;
+                }
+
+                var topProducts = db.TicketItems
+                    .Where(ti => ti.Ticket.Status == "closed" && ti.Ticket.ClosedAt.HasValue)
+                    .Where(ti => DbFunctions.TruncateTime(ti.Ticket.ClosedAt.Value) >= start &&
+                               DbFunctions.TruncateTime(ti.Ticket.ClosedAt.Value) <= end)
+                    .Where(ti => ti.ItemId.HasValue)
+                    .GroupBy(ti => new { ti.ItemId, ti.ItemName })
+                    .Select(g => new
+                    {
+                        itemId = g.Key.ItemId,
+                        itemName = g.Key.ItemName ?? "Bilinmeyen Ürün",
+                        totalQuantity = g.Sum(ti => ti.Quantity),
+                        totalRevenue = g.Sum(ti => ti.LineTotal),
+                        orderCount = g.Count()
+                    })
+                    .OrderByDescending(p => p.totalQuantity)
+                    .Take(50)
+                    .ToList();
+
+                // Kategori bilgilerini al
+                var itemIds = topProducts.Select(p => p.itemId.Value).ToList();
+                var menuItems = db.MenuItems
+                    .Include(mi => mi.Category)
+                    .Where(mi => itemIds.Contains(mi.ItemId))
+                    .ToList()
+                    .ToDictionary(mi => mi.ItemId, mi => new { 
+                        categoryName = mi.Category != null ? mi.Category.CategoryName : "Kategori Yok",
+                        price = mi.Price
+                    });
+
+                var result = topProducts.Select(p => new
+                {
+                    itemId = p.itemId,
+                    itemName = p.itemName,
+                    categoryName = p.itemId.HasValue && menuItems.ContainsKey(p.itemId.Value) 
+                        ? menuItems[p.itemId.Value].categoryName 
+                        : "Kategori Yok",
+                    totalQuantity = p.totalQuantity,
+                    totalRevenue = p.totalRevenue,
+                    orderCount = p.orderCount,
+                    averagePrice = p.totalQuantity > 0 ? p.totalRevenue / p.totalQuantity : 0
+                }).ToList();
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return InternalServerError(ex);
+            }
+        }
+
         // Raw SQL sonuçları için helper class
         public class RevenueGrowthResult
         {

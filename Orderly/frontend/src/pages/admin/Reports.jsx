@@ -19,7 +19,7 @@ import {
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import 'dayjs/locale/tr';
-import { getDailyRevenue, getRevenueGrowth, getSummary } from '../../services/api';
+import { getDailyRevenue, getRevenueGrowth, getSummary, getTopSellingProducts } from '../../services/api';
 
 const { RangePicker } = DatePicker;
 const { Option } = Select;
@@ -32,6 +32,7 @@ const Reports = () => {
   const [dailyRevenue, setDailyRevenue] = useState([]);
   const [revenueGrowth, setRevenueGrowth] = useState([]);
   const [summary, setSummary] = useState(null);
+  const [topSellingProducts, setTopSellingProducts] = useState([]);
 
   useEffect(() => {
     loadReport();
@@ -54,6 +55,9 @@ const Reports = () => {
       } else if (reportType === 'revenue-growth') {
         const data = await getRevenueGrowth(startDate, endDate);
         setRevenueGrowth(data);
+      } else if (reportType === 'top-selling-products') {
+        const data = await getTopSellingProducts(startDate, endDate);
+        setTopSellingProducts(data);
       }
     } catch (error) {
       message.error('Rapor yüklenemedi');
@@ -93,6 +97,7 @@ const Reports = () => {
               <Radio.Button value="summary">Özet Rapor</Radio.Button>
               <Radio.Button value="daily-revenue">Günlük Hasılat</Radio.Button>
               <Radio.Button value="revenue-growth">Hasılat Artışı</Radio.Button>
+              <Radio.Button value="top-selling-products">En Çok Satılan Ürünler</Radio.Button>
             </Radio.Group>
           </div>
           <div>
@@ -321,6 +326,106 @@ const Reports = () => {
               </Card>
             </Col>
           </Row>
+        </Card>
+      )}
+
+      {/* En Çok Satılan Ürünler Tablosu */}
+      {reportType === 'top-selling-products' && (
+        <Card title="En Çok Satılan Ürünler" loading={loading}>
+          <Table
+            dataSource={topSellingProducts}
+            rowKey="itemId"
+            columns={[
+              {
+                title: 'Sıra',
+                key: 'index',
+                width: 60,
+                render: (_, __, index) => index + 1,
+              },
+              {
+                title: 'Ürün Adı',
+                dataIndex: 'itemName',
+                key: 'itemName',
+                width: 250,
+              },
+              {
+                title: 'Kategori',
+                dataIndex: 'categoryName',
+                key: 'categoryName',
+                width: 150,
+              },
+              {
+                title: 'Toplam Adet',
+                dataIndex: 'totalQuantity',
+                key: 'totalQuantity',
+                width: 120,
+                align: 'right',
+                render: (quantity) => parseFloat(quantity || 0).toFixed(2),
+              },
+              {
+                title: 'Toplam Hasılat',
+                dataIndex: 'totalRevenue',
+                key: 'totalRevenue',
+                width: 150,
+                align: 'right',
+                render: (revenue) => <strong>{formatCurrency(revenue)}</strong>,
+              },
+              {
+                title: 'Ortalama Fiyat',
+                dataIndex: 'averagePrice',
+                key: 'averagePrice',
+                width: 130,
+                align: 'right',
+                render: (price) => formatCurrency(price),
+              },
+              {
+                title: 'Sipariş Sayısı',
+                dataIndex: 'orderCount',
+                key: 'orderCount',
+                width: 120,
+                align: 'right',
+              },
+            ]}
+            pagination={{
+              pageSize: 20,
+              showSizeChanger: true,
+              showTotal: (total) => `Toplam ${total} ürün`,
+            }}
+            locale={{ emptyText: 'Seçilen tarih aralığında veri bulunamadı' }}
+            summary={(pageData) => {
+              let totalQuantity = 0;
+              let totalRevenue = 0;
+              let totalOrders = 0;
+
+              pageData.forEach(({ totalQuantity: qty, totalRevenue: rev, orderCount }) => {
+                totalQuantity += parseFloat(qty || 0);
+                totalRevenue += parseFloat(rev || 0);
+                totalOrders += orderCount || 0;
+              });
+
+              return (
+                <Table.Summary fixed>
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0} colSpan={3}>
+                      <strong>TOPLAM</strong>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={1} align="right">
+                      <strong>{totalQuantity.toFixed(2)}</strong>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={2} align="right">
+                      <strong>{formatCurrency(totalRevenue)}</strong>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={3} align="right">
+                      <strong>-</strong>
+                    </Table.Summary.Cell>
+                    <Table.Summary.Cell index={4} align="right">
+                      <strong>{totalOrders}</strong>
+                    </Table.Summary.Cell>
+                  </Table.Summary.Row>
+                </Table.Summary>
+              );
+            }}
+          />
         </Card>
       )}
     </div>

@@ -291,6 +291,14 @@ export const getSummary = async (startDate = null, endDate = null) => {
   return response.data;
 };
 
+export const getTopSellingProducts = async (startDate = null, endDate = null) => {
+  const params = {};
+  if (startDate) params.startDate = startDate;
+  if (endDate) params.endDate = endDate;
+  const response = await api.get('/reports/top-selling-products', { params });
+  return response.data;
+};
+
 // Auth API
 export const login = async (password) => {
   const response = await api.post('/users/login', { password });
